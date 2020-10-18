@@ -50,31 +50,21 @@ class PpmImage:
             self.R = []
             self.G = []
             self.B = []
-            
-            file_content = file.read()
-            read_rows = [
-                file_content[i : i + (self.width * self.bytes_per_comp * 3)]
-                for i in range(0, len(file_content), self.width * self.bytes_per_comp * 3)
-            ]
-            read_pixels = [
-                [
-                    [int(e) for e in row[i : i + self.bytes_per_comp * 3]]
-                    for i in range(0, len(row), self.bytes_per_comp * 3)
-                ]
-                for row in read_rows
-            ]
 
-        for row in read_pixels:
-            r = []
-            g = []
-            b = []
-            for comp in row:
-                r.append(comp[0])
-                g.append(comp[1])
-                b.append(comp[2])
-            self.R.append(r)
-            self.G.append(g)
-            self.B.append(b)
+            file_content = file.read()
+            for i in range(0, len(file_content), self.width * self.bytes_per_comp * 3):
+                line = file_content[i : i + self.width * self.bytes_per_comp * 3]
+                r = []
+                g = []
+                b = []
+                for j in range(0, len(line), self.bytes_per_comp * 3):
+                    r.append(int.from_bytes(line[j : j + self.bytes_per_comp], byteorder="big", signed=False))
+                    g.append(int.from_bytes(line[j + self.bytes_per_comp : j + self.bytes_per_comp * 2], byteorder="big", signed=False))
+                    b.append(int.from_bytes(line[j + self.bytes_per_comp * 2 : j +self.bytes_per_comp * 3],
+                         byteorder="big", signed=False))
+                self.R.append(r)
+                self.G.append(g)
+                self.B.append(b)
                     
         self.R = np.array(self.R, dtype=data_type)
         self.G = np.array(self.G, dtype=data_type)
