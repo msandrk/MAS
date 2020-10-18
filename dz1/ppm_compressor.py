@@ -6,7 +6,7 @@ quant_table_k1 = np.array([
     [16, 11, 10, 16, 24, 40, 51, 61],
     [12, 12, 14, 19, 26, 58, 60, 55],
     [14, 13, 16, 24, 40, 57, 69, 56],
-    [14, 17, 22, 29, 51, 86, 80, 62],
+    [14, 17, 22, 29, 51, 87, 80, 62],
     [18, 22, 37, 56, 68, 109, 103, 77],
     [24, 35, 55, 64, 81, 104, 113, 92],
     [49, 64, 78, 87, 103, 121, 120, 101],
@@ -26,8 +26,6 @@ quant_table_k2 = np.array([
 
 class PpmImage:
     def __init__(self, path : str):
-        
-    # def parse_ppm_file(self, path):
         with open(path, "rb") as file:
             
             ppm_format = file.readline()
@@ -52,35 +50,35 @@ class PpmImage:
             self.R = []
             self.G = []
             self.B = []
-                
-            for row in range(self.height):
-                # line = file.readline(self.width * self.bytes_per_comp * 3)
-                line = file.readline()
-                if line.startswith("#".encode("ansi")):
-                    continue
-                
-                r = []
-                g = []
-                b = []
-                i = 0
-                while i < self.width * self.bytes_per_comp * 3:
-                    r.append(int.from_bytes(line[i : i + self.bytes_per_comp], byteorder=sys.byteorder, signed=False))
+            
+            file_content = file.read()
+            read_rows = [
+                file_content[i : i + (self.width * self.bytes_per_comp * 3)]
+                for i in range(0, len(file_content), self.width * self.bytes_per_comp * 3)
+            ]
+            read_pixels = [
+                [
+                    [int(e) for e in row[i : i + self.bytes_per_comp * 3]]
+                    for i in range(0, len(row), self.bytes_per_comp * 3)
+                ]
+                for row in read_rows
+            ]
+
+        for row in read_pixels:
+            r = []
+            g = []
+            b = []
+            for comp in row:
+                r.append(comp[0])
+                g.append(comp[1])
+                b.append(comp[2])
+            self.R.append(r)
+            self.G.append(g)
+            self.B.append(b)
                     
-                    i += self.bytes_per_comp
-                    
-                    g.append(int.from_bytes(line[i : i + self.bytes_per_comp], byteorder=sys.byteorder, signed=False))
-                    i += self.bytes_per_comp
-                    
-                    b.append(int.from_bytes(line[i : i + self.bytes_per_comp], byteorder=sys.byteorder, signed=False))
-                    i += self.bytes_per_comp
-                
-                self.R.append(np.array(r, dtype=data_type))
-                self.G.append(np.array(g, dtype=data_type))
-                self.B.append(np.array(b, dtype=data_type))
-        
-        self.R = np.array(self.R)
-        self.G = np.array(self.G)
-        self.B = np.array(self.B)
+        self.R = np.array(self.R, dtype=data_type)
+        self.G = np.array(self.G, dtype=data_type)
+        self.B = np.array(self.B, dtype=data_type)
 
 def get_rgb_comp_for_block(ppm_image, block_number, block_dimension=8):
     if block_number < 0:
@@ -91,14 +89,20 @@ def get_rgb_comp_for_block(ppm_image, block_number, block_dimension=8):
     g_block = []
     b_block = []
     
+    blocks_per_row = ppm_image.width // block_dimension
     # index of first row of the block
-    first_row = block_number // (ppm_image.width // block_dimension)
+    first_row = int(np.floor(block_number // blocks_per_row) * block_dimension)
+    
+    # index of first column of the block
+    first_column = block_number / blocks_per_row - block_number // blocks_per_row
+    first_column *= blocks_per_row * block_dimension
+    first_column = int(first_column)
     
     for row in range(first_row, first_row + block_dimension):
         curr_r_row = []
         curr_g_row = []
         curr_b_row = []
-        for i in range(block_number * block_dimension, block_dimension * (block_number + 1)):
+        for i in range(first_column, first_column + block_dimension):
             curr_r_row.append(ppm_image.R[row][i])
             curr_g_row.append(ppm_image.G[row][i])
             curr_b_row.append(ppm_image.B[row][i])
@@ -107,53 +111,69 @@ def get_rgb_comp_for_block(ppm_image, block_number, block_dimension=8):
         b_block.append(curr_b_row)
 
     return np.array(r_block), np.array(g_block), np.array(b_block)
-
+    
 
 def transform_to_ycbcr(R : np.array, G : np.array, B : np.array):
-    y = 0.299 * R + 0.587 * G + 0.114 * B
-    cb = -0.1687 * R - 0.3313 * G + 0.5 * B + 128
-    cr = 0.5 * R - 0.4187 * G - 0.0813 * B + 128
-    return (y, cb, cr)
+    
+    y = [
+        [0.299 * R[i][j] + 0.587 * G[i][j] + 0.114 * B[i][j] for j in range(R.shape[1])] 
+            for i in range(R.shape[0])
+        ]
+    cb = [
+        [-0.1687 * R[i][j] - 0.3313 * G[i][j] + 0.5 * B[i][j] + 128 for j in range(R.shape[1])]
+            for i in range(R.shape[1])
+        ]
+    cr = [
+        [0.5 * R[i][j] - 0.4187 * G[i][j] - 0.0813 * B[i][j]  + 128 for j in range(R.shape[0])]
+            for i in range(R.shape[0])
+        ]
+    
+    return np.array(y), np.array(cb), np.array(cr)
+
 
 def dct__2d_transformatioin(y: np.array, cb: np.array, cr: np.array, block_dimension=8):
     y_dct = []
-    cb_dct= []
+    cb_dct = []
     cr_dct = []
     for u in range(block_dimension):
-        curr_row_y = []
-        curr_row_cb = []
-        curr_row_cr = []
-        pi_u = np.pi * u / (2 * block_dimension)
+        # u_coeff = pow(0.5, 0.5) if u == 0 else 1
+        pi_u = (u * np.pi) / 16
+        curr_y = np.zeros((y.shape[1]))
+        curr_cb = np.zeros((cb.shape[1]))
+        curr_cr = np.zeros((cr.shape[1]))
         for v in range(block_dimension):
-            coeff = 0.5 if u == 0 or v == 0 else 1
-            coeff /= 4
-            pi_v = np.pi * v / (2 * block_dimension)
-            curr_values = np.zeros((3, 1))
-            for i in range (y.shape[0]):
-                for j in range(y.shape[1]):
-                    curr_values[0] += y[i][j] * coeff * np.cos((2 * i + 1) * pi_u) * np.cos((2 * j + 1) * pi_v)
-                    curr_values[1] += cb[i][j] * coeff * np.cos((2 * i + 1) * pi_u) * np.cos((2 * j + 1) * pi_v)
-                    curr_values[2] += cr[i][j] * coeff * np.cos((2 * i + 1) * pi_u) * np.cos((2 * j + 1) * pi_v)
-            curr_row_y.append(curr_values[0])
-            curr_row_cb.append(curr_values[1])
-            curr_row_cr.append(curr_values[2])
-    y_dct.append(curr_row_y)
-    cr_dct.append(curr_row_cb)
-    cb_dct.append(curr_row_cr)
-    return y_dct, cb_dct, cr_dct
+            coeff = 0.5 if (u == 0 or v == 0) else 1
+            # coeff = pow(0.5, 0.5) * u_coeff if v == 0 else u_coeff
+            pi_v = (v * np.pi) / 16
+            coeff *= (2 / block_dimension)
+            for i in range(block_dimension):
+                for j in range(block_dimension):
+                    curr_y[v] += y[i][j] * np.cos((2 * i + 1) * pi_u) * np.cos((2 * j + 1) * pi_v)
+                    curr_cb[v] += cb[i][j] * np.cos((2 * i + 1) * pi_u) * np.cos((2 * j + 1) * pi_v)
+                    curr_cr[v] += cr[i][j] * np.cos((2 * i + 1) * pi_u) * np.cos((2 * j + 1) * pi_v)
+        y_dct.append(coeff * curr_y)
+        cb_dct.append(coeff * curr_cb)
+        cr_dct.append(coeff * curr_cr)
+
+    return np.array(y_dct), np.array(cb_dct), np.array(cr_dct)
 
 def quantize(matrix, quant_table, inverse=False):
-    return matrix
+    if inverse is True:
+        return np.multiply(matrix, quant_table).astype('int64')
+    
+    return np.divide(matrix, quant_table).astype('int64')
+
 
 def write_matrix_to_file(m, out_file):
     for row in m:
             for e in row:
-                out_file.write(e + "\t")
-
+                out_file.write(str(e) + "\t")
+            out_file.write("\n")
 
 def compress_ppm(input_path, block_number, out_path):
     ppm_image = PpmImage(input_path)
     r, g, b = get_rgb_comp_for_block(ppm_image, block_number)
+    
     y, cb, cr = transform_to_ycbcr(r, g, b)
     
     # translate components to [-128, 127] interval
@@ -166,7 +186,14 @@ def compress_ppm(input_path, block_number, out_path):
     y = quantize(y, quant_table_k1)
     cb = quantize(cb, quant_table_k2)
     cr = quantize(cr, quant_table_k2)
-    
+
+    write_matrix_to_file(y, sys.stdout)
+    print("\n")
+    write_matrix_to_file(cb, sys.stdout)
+    print("\n")
+    write_matrix_to_file(cr, sys.stdout)
+    print("\n")
+
     with open(out_path, "w") as out_file:
         write_matrix_to_file(y, out_file)
         out_file.write("\n")
