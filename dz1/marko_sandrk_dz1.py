@@ -145,10 +145,11 @@ def dct_2d_transformatioin(y: np.array, cb: np.array, cr: np.array, block_dimens
             coeff *= (2 / block_dimension)
         
             for i in range(block_dimension):
+                i_cos = np.cos((2 * i + 1) * pi_u)
                 for j in range(block_dimension):
-                    curr_y[v] += y[i][j] * np.cos((2 * i + 1) * pi_u) * np.cos((2 * j + 1) * pi_v)
-                    curr_cb[v] += cb[i][j] * np.cos((2 * i + 1) * pi_u) * np.cos((2 * j + 1) * pi_v)
-                    curr_cr[v] += cr[i][j] * np.cos((2 * i + 1) * pi_u) * np.cos((2 * j + 1) * pi_v)
+                    curr_y[v] += y[i][j] * i_cos * np.cos((2 * j + 1) * pi_v)
+                    curr_cb[v] += cb[i][j] * i_cos * np.cos((2 * j + 1) * pi_v)
+                    curr_cr[v] += cr[i][j] * i_cos * np.cos((2 * j + 1) * pi_v)
         
         y_dct.append(coeff * curr_y)
         cb_dct.append(coeff * curr_cb)
