@@ -80,37 +80,37 @@ class PpmImage:
         self.G = np.array(self.G, dtype=data_type)
         self.B = np.array(self.B, dtype=data_type)
 
-def get_rgb_comp_for_block(ppm_image, block_number, block_dimension=8):
-    if block_number < 0:
-        block_number = 0
-    elif block_number >= (ppm_image.width // block_dimension)  * (ppm_image.height // block_dimension):
-        block_number = (ppm_image.width // block_number) * (ppm_image.height // block_dimension) - 1
-    r_block = []
-    g_block = []
-    b_block = []
-    
-    blocks_per_row = ppm_image.width // block_dimension
-    # index of first row of the block
-    first_row = int(np.floor(block_number // blocks_per_row) * block_dimension)
-    
-    # index of first column of the block
-    first_column = block_number / blocks_per_row - block_number // blocks_per_row
-    first_column *= blocks_per_row * block_dimension
-    first_column = int(first_column)
-    
-    for row in range(first_row, first_row + block_dimension):
-        curr_r_row = []
-        curr_g_row = []
-        curr_b_row = []
-        for i in range(first_column, first_column + block_dimension):
-            curr_r_row.append(ppm_image.R[row][i])
-            curr_g_row.append(ppm_image.G[row][i])
-            curr_b_row.append(ppm_image.B[row][i])
-        r_block.append(curr_r_row)
-        g_block.append(curr_g_row)
-        b_block.append(curr_b_row)
+    def get_rgb_comp_for_block(self, block_number, block_dimension=8):
+        if block_number < 0:
+            block_number = 0
+        elif block_number >= (self.width // block_dimension)  * (self.height // block_dimension):
+            block_number = (self.width // block_number) * (self.height // block_dimension) - 1
+        r_block = []
+        g_block = []
+        b_block = []
+        
+        blocks_per_row = self.width // block_dimension
+        # index of first row of the block
+        first_row = int(np.floor(block_number // blocks_per_row) * block_dimension)
+        
+        # index of first column of the block
+        first_column = block_number / blocks_per_row - block_number // blocks_per_row
+        first_column *= blocks_per_row * block_dimension
+        first_column = int(first_column)
+        
+        for row in range(first_row, first_row + block_dimension):
+            curr_r_row = []
+            curr_g_row = []
+            curr_b_row = []
+            for i in range(first_column, first_column + block_dimension):
+                curr_r_row.append(self.R[row][i])
+                curr_g_row.append(self.G[row][i])
+                curr_b_row.append(self.B[row][i])
+            r_block.append(curr_r_row)
+            g_block.append(curr_g_row)
+            b_block.append(curr_b_row)
 
-    return np.array(r_block), np.array(g_block), np.array(b_block)
+        return np.array(r_block), np.array(g_block), np.array(b_block)
     
 
 def transform_to_ycbcr(R : np.array, G : np.array, B : np.array):
@@ -131,7 +131,7 @@ def transform_to_ycbcr(R : np.array, G : np.array, B : np.array):
     return np.array(y), np.array(cb), np.array(cr)
 
 
-def dct__2d_transformatioin(y: np.array, cb: np.array, cr: np.array, block_dimension=8):
+def dct_2d_transformatioin(y: np.array, cb: np.array, cr: np.array, block_dimension=8):
     y_dct = []
     cb_dct = []
     cr_dct = []
@@ -170,9 +170,9 @@ def write_matrix_to_file(m, out_file):
                 out_file.write(str(e) + "\t")
             out_file.write("\n")
 
-def compress_ppm(input_path, block_number, out_path):
-    ppm_image = PpmImage(input_path)
-    r, g, b = get_rgb_comp_for_block(ppm_image, block_number)
+def compress_ppm(ppm_image, block_number, out_path):
+
+    r, g, b = ppm_image.get_rgb_comp_for_block(block_number)
     
     y, cb, cr = transform_to_ycbcr(r, g, b)
     
@@ -181,12 +181,13 @@ def compress_ppm(input_path, block_number, out_path):
     cb -= 128
     cr -= 128
 
-    y, cb, cr = dct__2d_transformatioin(y, cb, cr)
+    y, cb, cr = dct_2d_transformatioin(y, cb, cr)
 
     y = quantize(y, quant_table_k1)
     cb = quantize(cb, quant_table_k2)
     cr = quantize(cr, quant_table_k2)
 
+    # write the result on screen
     write_matrix_to_file(y, sys.stdout)
     print("\n")
     write_matrix_to_file(cb, sys.stdout)
@@ -194,6 +195,7 @@ def compress_ppm(input_path, block_number, out_path):
     write_matrix_to_file(cr, sys.stdout)
     print("\n")
 
+    # write the result into the file with given path
     with open(out_path, "w") as out_file:
         write_matrix_to_file(y, out_file)
         out_file.write("\n")
@@ -203,10 +205,11 @@ def compress_ppm(input_path, block_number, out_path):
 
 
 def main():
-    fi_path = sys.argv[1]
-    block_number = int(sys.argv[2])
-    out_path = sys.argv[3]
-    compress_ppm(fi_path, block_number, out_path)
+    fi_path = sys.argv[1]   # path to the input image
+    block_number = int(sys.argv[2]) # index of a desired block
+    out_path = sys.argv[3]  # path to the output file
+    ppm_image = PpmImage(fi_path)
+    compress_ppm(ppm_image, block_number, out_path)
 
 
 if __name__ == "__main__":
