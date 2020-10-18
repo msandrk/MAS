@@ -57,6 +57,7 @@ class PpmImage:
                 r = []
                 g = []
                 b = []
+        
                 for j in range(0, len(line), self.bytes_per_comp * 3):
                     r.append(int.from_bytes(line[j : j + self.bytes_per_comp], byteorder="big", signed=False))
                     g.append(int.from_bytes(line[j + self.bytes_per_comp : j + self.bytes_per_comp * 2], byteorder="big", signed=False))
@@ -71,10 +72,12 @@ class PpmImage:
         self.B = np.array(self.B, dtype=data_type)
 
     def get_rgb_comp_for_block(self, block_number, block_dimension=8):
+        
         if block_number < 0:
             block_number = 0
         elif block_number >= (self.width // block_dimension)  * (self.height // block_dimension):
             block_number = (self.width // block_number) * (self.height // block_dimension) - 1
+        
         r_block = []
         g_block = []
         b_block = []
@@ -92,10 +95,12 @@ class PpmImage:
             curr_r_row = []
             curr_g_row = []
             curr_b_row = []
+            
             for i in range(first_column, first_column + block_dimension):
                 curr_r_row.append(self.R[row][i])
                 curr_g_row.append(self.G[row][i])
                 curr_b_row.append(self.B[row][i])
+            
             r_block.append(curr_r_row)
             g_block.append(curr_g_row)
             b_block.append(curr_b_row)
@@ -109,10 +114,12 @@ def transform_to_ycbcr(R : np.array, G : np.array, B : np.array):
         [0.299 * R[i][j] + 0.587 * G[i][j] + 0.114 * B[i][j] for j in range(R.shape[1])] 
             for i in range(R.shape[0])
         ]
+    
     cb = [
         [-0.1687 * R[i][j] - 0.3313 * G[i][j] + 0.5 * B[i][j] + 128 for j in range(R.shape[1])]
             for i in range(R.shape[1])
         ]
+    
     cr = [
         [0.5 * R[i][j] - 0.4187 * G[i][j] - 0.0813 * B[i][j]  + 128 for j in range(R.shape[0])]
             for i in range(R.shape[0])
@@ -125,22 +132,24 @@ def dct_2d_transformatioin(y: np.array, cb: np.array, cr: np.array, block_dimens
     y_dct = []
     cb_dct = []
     cr_dct = []
+    
     for u in range(block_dimension):
-        # u_coeff = pow(0.5, 0.5) if u == 0 else 1
         pi_u = (u * np.pi) / 16
         curr_y = np.zeros((y.shape[1]))
         curr_cb = np.zeros((cb.shape[1]))
         curr_cr = np.zeros((cr.shape[1]))
+        
         for v in range(block_dimension):
             coeff = 0.5 if (u == 0 or v == 0) else 1
-            # coeff = pow(0.5, 0.5) * u_coeff if v == 0 else u_coeff
             pi_v = (v * np.pi) / 16
             coeff *= (2 / block_dimension)
+        
             for i in range(block_dimension):
                 for j in range(block_dimension):
                     curr_y[v] += y[i][j] * np.cos((2 * i + 1) * pi_u) * np.cos((2 * j + 1) * pi_v)
                     curr_cb[v] += cb[i][j] * np.cos((2 * i + 1) * pi_u) * np.cos((2 * j + 1) * pi_v)
                     curr_cr[v] += cr[i][j] * np.cos((2 * i + 1) * pi_u) * np.cos((2 * j + 1) * pi_v)
+        
         y_dct.append(coeff * curr_y)
         cb_dct.append(coeff * curr_cb)
         cr_dct.append(coeff * curr_cr)
@@ -198,6 +207,7 @@ def main():
     fi_path = sys.argv[1]   # path to the input image
     block_number = int(sys.argv[2]) # index of a desired block
     out_path = sys.argv[3]  # path to the output file
+
     ppm_image = PpmImage(fi_path)
     compress_ppm(ppm_image, block_number, out_path)
 
