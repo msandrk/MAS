@@ -16,27 +16,27 @@
 */
 void calculateFrequency(char const *filename, float *freqs){
     FILE *file = fopen(filename, "rb");
-
-    if(file == NULL) {
-        printf("\nNeuspjesno citanje datoteke...");
-        exit(1);
-    }
-
     int counts[NUM_OF_GROUPS] = { 0 };
     int width = 0, height = 0;
     int numOfPixels;
     uint16_t currPixel = 0, maxVal = 0;
-    uint8_t readBytes = 0, shiftBy;
-    char tmp[6];
+    uint8_t readBytes, shiftBy;
+    char buff[6];       // max number of chars that can be read in a column, if there
+                        // are no comments in the .pgm file, is 6 (if maxVal is "65535" + "\n")
 
-    fgets(tmp, 6, file); // read "P5" annotation
-    fgets(tmp, 6, file); // read image width
-    width = atoi(tmp);
-    fgets(tmp, 6, file); // read image height;
-    height = atoi(tmp);
+    if(file == NULL) {
+        printf("\nNo such file or directory! Exiting...\n\n");
+        exit(1);
+    }
 
-    fgets(tmp, 6, file); // read maxval;
-    maxVal = atoi(tmp);
+    fgets(buff, 3, file); // read "P5" annotation
+    fgets(buff, 6, file); // read image width
+    width = atoi(buff);
+    fgets(buff, 6, file); // read image height;
+    height = atoi(buff);
+
+    fgets(buff, 6, file); // read maxval;
+    maxVal = atoi(buff);
 
     readBytes = maxVal > 255 ? 2 : 1; // each pixel is represented by how many bytes
     shiftBy = readBytes == 1 ? 4 : 12;
@@ -69,7 +69,7 @@ void printResults(float *freqs){
 int main(int argc, char const *argv[])
 {
     if(argc != 2){
-        printf("\nPotrebno je predati datoteku u pgm formatu kao argument...\n");
+        printf("\nProgram requires 1 argument which represents the path to a '.pgm' file!\n\n");
         exit(1);
     }
 
