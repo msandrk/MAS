@@ -15,13 +15,19 @@ typedef struct _real_search_coord_ {
     int y2;
 } real_search_coord;
 
+typedef struct _vector_ {
+    int x;
+    int y;
+} vector;
 
 /*
     Loads block with index 'blockNumber' into 'referentBlock' matrix.
     Returns 'blockNumber' that was acctualy loaded (e.g. if 'blockNumber'
     is less than 0, block with index 0 will be loaded to 'referentBlock')
 */
-int getReferentBlock(char const *fileName, uint16_t referentBlock[BLOCK_SIZE][BLOCK_SIZE], int blockNumber){
+int getReferentBlock(char const *fileName, int blockNumber, 
+                    uint16_t referentBlock[BLOCK_SIZE][BLOCK_SIZE]){
+    
     int picWidth, picHeight;
     char buff[6];
     uint8_t elementSize = 0;
@@ -83,13 +89,15 @@ int getReferentBlock(char const *fileName, uint16_t referentBlock[BLOCK_SIZE][BL
     -BLOCK_SIZE elements in both x and y directions are not present and in that case
     rowStart and column start are properly adjusted.
 */
-void getSearchArea(char const *fileName, uint16_t searchWindow[3*BLOCK_SIZE][3*BLOCK_SIZE],
-                    int blockNumber, int *rowStart, int *rowEnd, int *colStart, int *colEnd){
+real_search_coord getSearchArea(char const *fileName, int blockNumber, 
+                    uint16_t searchWindow[3*BLOCK_SIZE][3*BLOCK_SIZE]){
+    
     int picWidth, picHeight;
     char buff[6];
     uint8_t elementSize = 0;
     uint16_t maxVal;
     int firstRow, firstColumn, lastRow, lastColumn;
+    real_search_coord coords = { 0, 0, 0, 0};
     FILE *picture = fopen(fileName, "rb");
 
     if(picture == NULL){
@@ -111,19 +119,19 @@ void getSearchArea(char const *fileName, uint16_t searchWindow[3*BLOCK_SIZE][3*B
 
     // Start with one block above the referent block.
     firstRow = blockNumber / (picWidth / BLOCK_SIZE) * BLOCK_SIZE - BLOCK_SIZE;
-    *rowStart = firstRow < 0 ? BLOCK_SIZE : 0;  // set start of real data in searchArea
+    coords.y1 = firstRow < 0 ? BLOCK_SIZE : 0;  // set start of real data in searchArea
     
     // Start with one block to the left of the referent block.
     firstColumn = blockNumber % (picWidth / BLOCK_SIZE) * BLOCK_SIZE - BLOCK_SIZE;
-    *colStart = firstColumn < 0 ? BLOCK_SIZE : 0; // set start of real data in searchArea
+    coords.x1 = firstColumn < 0 ? BLOCK_SIZE : 0; // set start of real data in searchArea
     
     // End with block below the referent block
     lastRow = firstRow + 3 * BLOCK_SIZE;
-    *rowEnd = lastRow > picHeight ? 2 * BLOCK_SIZE : 3 * BLOCK_SIZE; // set end of real data
+    coords.y2 = lastRow > picHeight ? 2 * BLOCK_SIZE : 3 * BLOCK_SIZE; // set end of real data
 
     // End with one block to the right of the referent block.
     lastColumn = firstColumn + 3 * BLOCK_SIZE;
-    *colEnd = lastColumn > picWidth ? 2 * BLOCK_SIZE : 3 * BLOCK_SIZE; // set end of real data
+    coords.x2 = lastColumn > picWidth ? 2 * BLOCK_SIZE : 3 * BLOCK_SIZE; // set end of real data
     
     firstRow = firstRow < 0 ? 0 : firstRow;
     firstColumn = firstColumn < 0 ? 0 : firstColumn;
@@ -133,21 +141,22 @@ void getSearchArea(char const *fileName, uint16_t searchWindow[3*BLOCK_SIZE][3*B
     fseek(picture, firstColumn * elementSize, SEEK_CUR);
 
     if (elementSize == 1) {
-        for(int i = *rowStart; i < *rowEnd; i++){
-            for(int j = *colStart; j < *colEnd; j++){
+        for(int i = coords.y1; i < coords.y2; i++){
+            for(int j = coords.x1; j < coords.x2; j++){
                 fread(&searchWindow[i][j], elementSize, 1, picture);
             }
-            fseek(picture, picWidth - (*colEnd - *colStart + 1), SEEK_CUR);
+            fseek(picture, picWidth - (coords.x2 - coords.x1 + 1), SEEK_CUR);
         }
     } else {
-        for(int i = *rowStart; i < *rowEnd; i++){
-            size_t bytesRead = fread(&searchWindow[i][*colStart], elementSize,
-                                    (*colEnd - *colStart) + 1, picture);
+        for(int i = coords.y1; i < coords.y2; i++){
+            size_t bytesRead = fread(&searchWindow[i][coords.x1], elementSize,
+                                    (coords.x2 - coords.x1) + 1, picture);
             fseek(picture, (picWidth * elementSize - bytesRead), SEEK_CUR);
         }
     }
     
     fclose(picture);
+    return coords;
 }
 
 /*
@@ -165,17 +174,17 @@ double mean_absolute_difference(uint16_t block1[BLOCK_SIZE][BLOCK_SIZE],
     return result / (BLOCK_SIZE * BLOCK_SIZE);
 }
 
-void full_search(uint16_t referentBlock[BLOCK_SIZE][BLOCK_SIZE],
+vector full_search(uint16_t referentBlock[BLOCK_SIZE][BLOCK_SIZE],
                 uint16_t searchArea[3 * BLOCK_SIZE][3 * BLOCK_SIZE],
-                int rowStart, int rowEnd, int colStart, int colEnd){
+                real_search_coord const *coords){
 
     double currMAD, minMAD = -1.; // MAD must be >= 0
-    int x = 0, y = 0;   // move vector
-    uint16_t activeBlock[BLOCK_SIZE][BLOCK_SIZE];
-
-    for(int i = rowStart; i < rowEnd - BLOCK_SIZE; i++){
-        for(int j = colStart; j < colEnd - BLOCK_SIZE; j++){
+    vector moveVector = { 0, 0};
+    
+    for(int i = coords->y1; i < coords->y2 - BLOCK_SIZE; i++){
+        for(int j = coords->x1; j < coords->x2 - BLOCK_SIZE; j++){
             // get block that is currently being compared
+            uint16_t activeBlock[BLOCK_SIZE][BLOCK_SIZE];
             for(int k = 0; k < BLOCK_SIZE; k++){
                 for(int l = 0; l < BLOCK_SIZE; l++){
                     activeBlock[k][l] = searchArea[i + k][j + l];
@@ -184,16 +193,13 @@ void full_search(uint16_t referentBlock[BLOCK_SIZE][BLOCK_SIZE],
             currMAD = mean_absolute_difference(referentBlock, activeBlock);
             if (minMAD < 0 || currMAD < minMAD) {
                 minMAD = currMAD;
-                x = j;
-                y = i;
+                moveVector.x = j - BLOCK_SIZE;
+                moveVector.y = i - BLOCK_SIZE;
             }
         }
     }
 
-    x -= BLOCK_SIZE;
-    y -= BLOCK_SIZE;
-
-    printf("%d,%d: %f\n", x, y, minMAD);
+    return moveVector;
 }
 
 int main(int argc, char const *argv[])
@@ -204,21 +210,18 @@ int main(int argc, char const *argv[])
     }
 
     int blockNumber = atoi(argv[1]);
-    int rowStartIndex, rowEndIndex, colStartIndex, colEndIndex;
+    real_search_coord coords;
+    vector moveVector;
     uint16_t referentBlock[BLOCK_SIZE][BLOCK_SIZE] = { 0 };
     uint16_t searchWindow[3 * BLOCK_SIZE][3 * BLOCK_SIZE] = { 0 };
     
-    blockNumber = getReferentBlock("./lenna1.pgm", referentBlock, blockNumber);
+    blockNumber = getReferentBlock("./lenna1.pgm", blockNumber, referentBlock);
 
-    // for(int i = 0; i < BLOCK_SIZE; i++){
-    //     for(int j = 0; j < BLOCK_SIZE; j++){
-    //         printf("%d ", referentBlock[i][j]);
-    //     }
-    //     printf("\n");
-    // }
-    getSearchArea("./lenna.pgm", searchWindow, blockNumber, &rowStartIndex, &rowEndIndex, &colStartIndex, &colEndIndex);
+    coords = getSearchArea("./lenna.pgm", blockNumber, searchWindow);
     
-    full_search(referentBlock, searchWindow, rowStartIndex, rowEndIndex, colStartIndex, colEndIndex);
+    moveVector = full_search(referentBlock, searchWindow, &coords);
     
+    printf("%d,%d\n", moveVector.x, moveVector.y);
+
     return 0;
 }
